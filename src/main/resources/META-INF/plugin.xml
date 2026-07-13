@@ -1,0 +1,37 @@
+<idea-plugin>
+    <id>eu.kennytv.dependency-manager</id>
+    <name>Dependency Manager for Gradle</name>
+    <vendor email="jahnke.nassim@gmail.com">Nassim Jahnke</vendor>
+    <description><![CDATA[
+        Interactive dependency update review, done locally instead of through bot PRs.
+        Open the tool window, read the release notes for each available update, untick
+        what you don't want, and apply the rest as a single commit.
+        <ul>
+            <li>Scans Gradle build scripts, version catalogs (libs.versions.toml), the Gradle
+                wrapper, and GitHub Actions workflows (SHA-pinned, tag-pinned, and moving-major refs).</li>
+            <li>Shows official GitHub release notes for each update.</li>
+            <li>Optionally verifies with a build before committing.</li>
+            <li>Ignore rules per dependency, version, or update type via .dependency-updates.toml.</li>
+        </ul>
+    ]]></description>
+
+    <depends>com.intellij.modules.platform</depends>
+    <dependencies>
+        <module name="intellij.libraries.markdown"/>
+        <module name="intellij.libraries.maven.resolver.provider"/>
+    </dependencies>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <toolWindow id="Dependency Updates"
+                    anchor="right"
+                    doNotActivateOnStart="true"
+                    factoryClass="eu.kennytv.dependencymanager.ui.DependencyToolWindowFactory"
+                    icon="AllIcons.Toolwindows.ToolWindowModuleDependencies"/>
+        <notificationGroup id="Dependency Manager" displayType="BALLOON"/>
+        <postStartupActivity implementation="eu.kennytv.dependencymanager.ui.StaleCheckStartupActivity"/>
+        <projectConfigurable parentId="tools"
+                             id="eu.kennytv.dependencymanager.settings"
+                             displayName="Dependency Manager"
+                             instance="eu.kennytv.dependencymanager.ui.DependencySettingsConfigurable"/>
+    </extensions>
+</idea-plugin>
