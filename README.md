@@ -1,3 +1,5 @@
+[![Install from JetBrains Marketplace](https://img.shields.io/badge/Install-JetBrains%20Marketplace-50A050?style=for-the-badge&logo=jetbrains)](https://plugins.jetbrains.com/plugin/32918)
+
 # Dependency Manager for Gradle
 
 An IntelliJ plugin for interactive dependency updates. Instead of one bot PR per dependency (or having to deal with PRs

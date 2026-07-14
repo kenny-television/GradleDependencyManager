@@ -1,4 +1,5 @@
 import org.jetbrains.intellij.platform.gradle.TestFrameworkType
+import org.jetbrains.kotlin.gradle.dsl.JvmDefaultMode
 
 plugins {
     java
@@ -7,7 +8,7 @@ plugins {
 }
 
 group = "eu.kennytv"
-version = "0.1.0"
+version = "0.1.1"
 
 repositories {
     mavenCentral()
@@ -37,7 +38,7 @@ intellijPlatform {
         name = "Dependency Manager for Gradle"
         version = project.version.toString()
         changeNotes = """
-            <h3>0.1.0</h3>
+            <h3>0.1.1</h3>
             <ul>
                 <li>Initial release</li>
                 <li>Scans Gradle build scripts, version catalogs, the Gradle wrapper, and GitHub Actions workflows</li>
@@ -64,6 +65,14 @@ intellijPlatform {
         privateKeyFile = signingDir.resolve("private.pem")
     }
     buildSearchableOptions = false
+}
+
+kotlin {
+    compilerOptions {
+        // Don't generate DefaultImpls bridges for platform interface defaults; the verifier
+        // flags the generated overrides of deprecated methods as deprecated API usage.
+        jvmDefault = JvmDefaultMode.NO_COMPATIBILITY
+    }
 }
 
 tasks.test {
