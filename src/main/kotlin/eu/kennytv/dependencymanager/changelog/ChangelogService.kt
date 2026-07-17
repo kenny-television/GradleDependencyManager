@@ -8,9 +8,11 @@ import eu.kennytv.dependencymanager.model.Changelog
 import eu.kennytv.dependencymanager.model.ScannedDependency
 import eu.kennytv.dependencymanager.model.UpdateCandidate
 import eu.kennytv.dependencymanager.resolve.Versions
-import org.intellij.markdown.flavours.gfm.GFMFlavourDescriptor
-import org.intellij.markdown.html.HtmlGenerator
-import org.intellij.markdown.parser.MarkdownParser
+import org.commonmark.ext.autolink.AutolinkExtension
+import org.commonmark.ext.gfm.strikethrough.StrikethroughExtension
+import org.commonmark.ext.gfm.tables.TablesExtension
+import org.commonmark.parser.Parser
+import org.commonmark.renderer.html.HtmlRenderer
 import java.nio.file.Files
 import java.nio.file.Path
 import java.security.MessageDigest
@@ -134,15 +136,17 @@ class ChangelogService(
 
     private fun tagVersion(tag: String): String? = TAG_VERSION.find(tag)?.value
 
-    private fun renderMarkdown(markdown: String): String {
-        val flavour = GFMFlavourDescriptor()
-        val tree = MarkdownParser(flavour).buildMarkdownTreeFromString(markdown)
-        // the view supplies its own <body>
-        return HtmlGenerator(markdown, tree, flavour).generateHtml()
-            .removePrefix("<body>").removeSuffix("</body>")
-    }
+    private fun renderMarkdown(markdown: String): String =
+        HTML_RENDERER.render(MARKDOWN_PARSER.parse(markdown))
 
     companion object {
+        private val MARKDOWN_EXTENSIONS = listOf(
+            TablesExtension.create(),
+            StrikethroughExtension.create(),
+            AutolinkExtension.create(),
+        )
+        private val MARKDOWN_PARSER = Parser.builder().extensions(MARKDOWN_EXTENSIONS).build()
+        private val HTML_RENDERER = HtmlRenderer.builder().extensions(MARKDOWN_EXTENSIONS).build()
         private val GITHUB_URL = Regex("""github\.com[:/]+([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+)""")
         private val TAG_VERSION = Regex("""\d+(\.\d+)*([.-][A-Za-z0-9]+)*""")
         private val CACHE_TTL_MILLIS = java.util.concurrent.TimeUnit.DAYS.toMillis(7)

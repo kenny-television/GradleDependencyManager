@@ -16,8 +16,8 @@
     ]]></description>
 
     <depends>com.intellij.modules.platform</depends>
+
     <dependencies>
-        <module name="intellij.libraries.markdown"/>
         <module name="intellij.libraries.maven.resolver.provider"/>
     </dependencies>
 

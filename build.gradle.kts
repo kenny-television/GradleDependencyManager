@@ -1,3 +1,4 @@
+import org.jetbrains.changelog.Changelog
 import org.jetbrains.intellij.platform.gradle.TestFrameworkType
 import org.jetbrains.kotlin.gradle.dsl.JvmDefaultMode
 
@@ -5,10 +6,11 @@ plugins {
     java
     kotlin("jvm") version "2.4.10"
     id("org.jetbrains.intellij.platform") version "2.18.1"
+    id("org.jetbrains.changelog") version "2.5.0"
 }
 
 group = "eu.kennytv"
-version = "0.1.1"
+version = "0.1.2"
 
 repositories {
     mavenCentral()
@@ -20,12 +22,16 @@ repositories {
 dependencies {
     intellijPlatform {
         intellijIdea("2026.1.4")
-        // Changelog markdown -> HTML
-        bundledModule("intellij.libraries.markdown")
         // Maven version ordering (ComparableVersion)
         bundledModule("intellij.libraries.maven.resolver.provider")
         testFramework(TestFrameworkType.Platform)
     }
+
+    // Changelog markdown -> HTML; the platform's own markdown module is private as of 2026.2
+    implementation("org.commonmark:commonmark:0.29.0")
+    implementation("org.commonmark:commonmark-ext-gfm-tables:0.29.0")
+    implementation("org.commonmark:commonmark-ext-gfm-strikethrough:0.29.0")
+    implementation("org.commonmark:commonmark-ext-autolink:0.29.0")
 
     testImplementation("org.junit.jupiter:junit-jupiter:6.1.2")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher:6.1.2")
@@ -37,15 +43,9 @@ intellijPlatform {
         id = "eu.kennytv.dependency-manager"
         name = "Dependency Manager for Gradle"
         version = project.version.toString()
-        changeNotes = """
-            <h3>0.1.1</h3>
-            <ul>
-                <li>Initial release</li>
-                <li>Scans Gradle build scripts, version catalogs, the Gradle wrapper, and GitHub Actions workflows</li>
-                <li>Release notes shown per update, batch apply as a single commit</li>
-                <li>Ignore rules via .dependency-updates.toml</li>
-            </ul>
-        """.trimIndent()
+        changeNotes = provider {
+            changelog.renderItem(changelog.get(project.version.toString()), Changelog.OutputType.HTML)
+        }
         vendor {
             name = "Nassim Jahnke"
         }
@@ -65,6 +65,11 @@ intellijPlatform {
         privateKeyFile = signingDir.resolve("private.pem")
     }
     buildSearchableOptions = false
+}
+
+changelog {
+    repositoryUrl = "https://github.com/kennytv/GradleDependencyManager"
+    groups.empty()
 }
 
 kotlin {
