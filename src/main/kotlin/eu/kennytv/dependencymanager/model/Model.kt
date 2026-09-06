@@ -6,6 +6,8 @@ enum class UpdateType { MAJOR, MINOR, PATCH, OTHER }
 
 enum class ActionRefType { SHA, FULL_TAG, MOVING_MAJOR }
 
+enum class NoteLevel { WARNING, INFO }
+
 data class ModuleCoordinate(val group: String, val name: String) {
     override fun toString(): String = "$group:$name"
 }
@@ -109,12 +111,23 @@ data class UpdateCandidate(
 
 data class SkippedDependency(val dependency: ScannedDependency, val reason: String)
 
+/** Advice about how a dependency is declared; unrelated to whether a newer version exists. */
+data class DependencyNote(
+    val dependency: ScannedDependency,
+    val level: NoteLevel,
+    /** one line, shown next to the dependency in the tree */
+    val summary: String,
+    /** HTML shown in the detail pane */
+    val detail: String,
+)
+
 data class CheckResult(
     val updates: List<UpdateCandidate>,
     val upToDateCount: Int,
     val skipped: List<SkippedDependency>,
     val errors: List<String>,
     val timestamp: Long,
+    val notes: List<DependencyNote> = emptyList(),
 )
 
 data class Changelog(

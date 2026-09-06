@@ -1,6 +1,7 @@
 package eu.kennytv.dependencymanager.scan
 
 import eu.kennytv.dependencymanager.model.ScannedDependency
+import java.io.IOException
 import java.nio.file.FileVisitResult
 import java.nio.file.Files
 import java.nio.file.Path
@@ -63,6 +64,34 @@ class ProjectScanner {
         dependencies += variableScanner.resolvedDependencies()
         repositories += GRADLE_PLUGIN_PORTAL
         return ScanResult(merge(dependencies), repositories.toList())
+    }
+
+    /**
+     * Whether the project holds a single file any of the scanners would look at. Used to stay
+     * quiet in projects that have no workflows, build scripts, catalogs or wrapper at all.
+     */
+    fun hasScannableFiles(root: Path): Boolean {
+        var found = false
+        try {
+            Files.walkFileTree(root, object : SimpleFileVisitor<Path>() {
+                override fun preVisitDirectory(dir: Path, attrs: BasicFileAttributes): FileVisitResult =
+                    if (dir != root && dir.name in SKIPPED_DIRS) FileVisitResult.SKIP_SUBTREE
+                    else FileVisitResult.CONTINUE
+
+                override fun visitFile(file: Path, attrs: BasicFileAttributes): FileVisitResult {
+                    val relativePath = root.relativize(file).joinToString("/") { it.name }
+                    if (scanners.none { it.matches(relativePath) }) return FileVisitResult.CONTINUE
+                    found = true
+                    return FileVisitResult.TERMINATE
+                }
+
+                override fun visitFileFailed(file: Path, exc: IOException): FileVisitResult =
+                    FileVisitResult.CONTINUE
+            })
+        } catch (_: IOException) {
+            return false
+        }
+        return found
     }
 
     private fun collectRepositories(content: String, into: MutableSet<String>) {

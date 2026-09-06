@@ -10,6 +10,8 @@
             <li>Scans Gradle build scripts, version catalogs (libs.versions.toml), the Gradle
                 wrapper, and GitHub Actions workflows (SHA-pinned, tag-pinned, and moving-major refs).</li>
             <li>Shows official GitHub release notes for each update.</li>
+            <li>Flags action refs that can still be moved, and SHA pins whose release is
+                immutable anyway.</li>
             <li>Optionally verifies with a build before committing.</li>
             <li>Ignore rules per dependency, version, or update type via .dependency-updates.toml.</li>
         </ul>

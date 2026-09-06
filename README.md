@@ -26,7 +26,8 @@ Made for projects where only one person is responsible for dependency updates/wh
 4. Press apply. All checked updates are written, verified with `gradlew build` (toggleable; if the build fails, changes
    stay applied but nothing is committed) and committed as one commit (also toggleable).
 
-A notification reminds you when a project hasn't been checked for a while. The interval
+A notification reminds you when a project hasn't been checked for a while - only in projects that
+actually hold workflow, build script, version catalog or wrapper files. The interval
 (default 30 days) and the reminder itself are configurable per project under
 **Settings → Tools → Dependency Manager**; all plugin notifications can also be
 muted globally via Settings → Appearance & Behavior → Notifications.
@@ -36,6 +37,17 @@ muted globally via Settings → Appearance & Behavior → Notifications.
 - Unstable versions (alpha/beta/RC/M/EAP/SNAPSHOT) are only offered when the current version is itself unstable.
 - Range/dynamic versions (`[3.0.0,4.0.0)`, `1.+`, `latest.release`) are skipped.
 - SHA-pinned actions require version comments to be identified.
+
+## Action pinning
+
+Next to the updates, workflow refs are checked against
+[immutable releases](https://github.blog/changelog/2025-08-26-releases-now-support-immutability-in-public-preview/),
+which freeze a release's tag so it can no longer be moved or deleted:
+
+- **Warning** for a ref that can still move: a moving major (`@v5`), or a tag whose release isn't immutable. What runs
+  in the workflow can change without the ref changing, so pin it to the full commit SHA with a `# vX.Y.Z` comment.
+- **Info** for a SHA pin whose release *is* immutable - the tag alone would already resolve to the same code, so the
+  pin isn't needed for that version.
 
 ## Ignore rules: `.dependency-updates.toml`
 

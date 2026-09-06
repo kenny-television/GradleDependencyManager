@@ -6,9 +6,11 @@ import com.intellij.notification.NotificationType
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.startup.ProjectActivity
 import com.intellij.openapi.wm.ToolWindowManager
+import eu.kennytv.dependencymanager.scan.ProjectScanner
 import eu.kennytv.dependencymanager.service.DependencyUpdateService
 import eu.kennytv.dependencymanager.settings.DependencySettings
-import java.nio.file.Files
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.util.concurrent.TimeUnit
 
 class StaleCheckStartupActivity : ProjectActivity {
@@ -21,13 +23,9 @@ class StaleCheckStartupActivity : ProjectActivity {
         val last = service.lastCheckMillis
         if (last != 0L && System.currentTimeMillis() - last < TimeUnit.DAYS.toMillis(settings.reminderDays.toLong())) return
 
-        // If there's nothing to scan, skip
+        // Nothing this plugin could ever check here, so don't nag about checking it
         val root = service.projectRoot ?: return
-        val relevant = Files.exists(root.resolve("gradle/wrapper/gradle-wrapper.properties")) ||
-            Files.exists(root.resolve(".github/workflows")) ||
-            Files.exists(root.resolve("build.gradle.kts")) ||
-            Files.exists(root.resolve("build.gradle"))
-        if (!relevant) return
+        if (!withContext(Dispatchers.IO) { ProjectScanner().hasScannableFiles(root) }) return
 
         NotificationGroupManager.getInstance()
             .getNotificationGroup("Dependency Manager")

@@ -36,6 +36,8 @@ class ChangelogView : Disposable {
 
     fun showEmpty() = setBody("")
 
+    fun showHtml(html: String) = setBody(html)
+
     fun show(changelog: Changelog) {
         val link = changelog.linkUrl?.let { url ->
             "<p><a href=\"$url\">${changelog.linkLabel ?: url}</a></p>"

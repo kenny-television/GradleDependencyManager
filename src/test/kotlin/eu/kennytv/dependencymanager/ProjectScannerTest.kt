@@ -3,6 +3,7 @@ package eu.kennytv.dependencymanager
 import eu.kennytv.dependencymanager.model.ScannedDependency
 import eu.kennytv.dependencymanager.scan.ProjectScanner
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
@@ -68,5 +69,32 @@ class ProjectScannerTest {
 
         // no definition anywhere -> not reported
         assertTrue(deps.none { it.modules.any { m -> m.name == "no-definition" } })
+    }
+
+    @Test
+    fun `projects without workflows or gradle files have nothing to scan`() {
+        write("src/main/java/Main.java", "class Main {}")
+        write("gradle.properties", "someKey=value")
+        write(".github/dependabot.yml", "version: 2")
+
+        assertFalse(ProjectScanner().hasScannableFiles(root))
+    }
+
+    @Test
+    fun `a workflow or build file anywhere is enough to scan`() {
+        write("subproject/build.gradle.kts", "dependencies {}")
+        assertTrue(ProjectScanner().hasScannableFiles(root))
+
+        Files.delete(root.resolve("subproject/build.gradle.kts"))
+        write(".github/workflows/build.yml", "on: push")
+        assertTrue(ProjectScanner().hasScannableFiles(root))
+    }
+
+    @Test
+    fun `files in ignored directories do not count`() {
+        write("build/generated/build.gradle.kts", "dependencies {}")
+        write("node_modules/thing/.github/workflows/ci.yml", "on: push")
+
+        assertFalse(ProjectScanner().hasScannableFiles(root))
     }
 }

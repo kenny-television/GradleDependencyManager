@@ -11,6 +11,8 @@ data class GitHubRelease(
     val body: String?,
     val htmlUrl: String?,
     val prerelease: Boolean,
+    /** immutable releases (GitHub, 2025) freeze the release's tag and assets */
+    val immutable: Boolean = false,
 )
 
 class GitHubApi(private val http: Http) {
@@ -44,20 +46,32 @@ class GitHubApi(private val http: Http) {
     fun releases(owner: String, repo: String, perPage: Int = 50): List<GitHubRelease> {
         val body = get("/repos/$owner/$repo/releases?per_page=$perPage") ?: return emptyList()
         return try {
-            JsonParser.parseString(body).asJsonArray.mapNotNull { element ->
-                val obj = element.asJsonObject
-                if (obj.get("draft")?.asBoolean == true) return@mapNotNull null
-                GitHubRelease(
-                    tagName = obj.get("tag_name")?.asString ?: return@mapNotNull null,
-                    name = obj.get("name")?.takeIf { !it.isJsonNull }?.asString,
-                    body = obj.get("body")?.takeIf { !it.isJsonNull }?.asString,
-                    htmlUrl = obj.get("html_url")?.takeIf { !it.isJsonNull }?.asString,
-                    prerelease = obj.get("prerelease")?.asBoolean ?: false,
-                )
-            }
+            JsonParser.parseString(body).asJsonArray.mapNotNull { parseRelease(it.asJsonObject) }
         } catch (_: Exception) {
             emptyList()
         }
+    }
+
+    /** The release published for a tag, or null when the tag has no release. */
+    fun releaseByTag(owner: String, repo: String, tag: String): GitHubRelease? {
+        val body = get("/repos/$owner/$repo/releases/tags/$tag") ?: return null
+        return try {
+            parseRelease(JsonParser.parseString(body).asJsonObject)
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun parseRelease(obj: JsonObject): GitHubRelease? {
+        if (obj.get("draft")?.asBoolean == true) return null
+        return GitHubRelease(
+            tagName = obj.get("tag_name")?.asString ?: return null,
+            name = obj.get("name")?.takeIf { !it.isJsonNull }?.asString,
+            body = obj.get("body")?.takeIf { !it.isJsonNull }?.asString,
+            htmlUrl = obj.get("html_url")?.takeIf { !it.isJsonNull }?.asString,
+            prerelease = obj.get("prerelease")?.asBoolean ?: false,
+            immutable = obj.get("immutable")?.takeIf { !it.isJsonNull }?.asBoolean ?: false,
+        )
     }
 
     fun tags(owner: String, repo: String, perPage: Int = 100): List<String> {

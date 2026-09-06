@@ -2,9 +2,12 @@ package eu.kennytv.dependencymanager.resolve
 
 import com.google.gson.JsonParser
 import eu.kennytv.dependencymanager.github.GitHubApi
+import eu.kennytv.dependencymanager.github.GitHubRelease
 import eu.kennytv.dependencymanager.http.Http
 import eu.kennytv.dependencymanager.ignore.IgnoreRules
 import eu.kennytv.dependencymanager.model.ActionRefType
+import eu.kennytv.dependencymanager.model.DependencyNote
+import eu.kennytv.dependencymanager.model.NoteLevel
 import eu.kennytv.dependencymanager.model.ScannedDependency
 import eu.kennytv.dependencymanager.model.SkippedDependency
 import eu.kennytv.dependencymanager.model.UpdateCandidate
@@ -16,6 +19,9 @@ sealed class Resolution {
     data class Error(val message: String) : Resolution()
 }
 
+/** A resolution plus advice that is worth showing even when nothing needs updating. */
+data class ResolveOutcome(val resolution: Resolution, val note: DependencyNote? = null)
+
 class UpdateResolver(
     private val http: Http,
     private val github: GitHubApi,
@@ -23,34 +29,35 @@ class UpdateResolver(
     private val ignoreRules: IgnoreRules,
 ) {
 
-    fun resolve(dependency: ScannedDependency): Resolution {
+    fun resolve(dependency: ScannedDependency): ResolveOutcome {
         if (ignoreRules.isFullyIgnored(dependency)) {
-            return Resolution.Skipped(SkippedDependency(dependency, "ignored by rule"))
+            return ResolveOutcome(Resolution.Skipped(SkippedDependency(dependency, "ignored by rule")))
         }
         return when (dependency) {
             is ScannedDependency.GitHubAction -> resolveAction(dependency)
-            is ScannedDependency.MavenDependency -> resolveMaven(dependency)
-            is ScannedDependency.GradleWrapper -> resolveWrapper(dependency)
+            is ScannedDependency.MavenDependency -> ResolveOutcome(resolveMaven(dependency))
+            is ScannedDependency.GradleWrapper -> ResolveOutcome(resolveWrapper(dependency))
         }
     }
 
-    private fun resolveAction(dep: ScannedDependency.GitHubAction): Resolution {
+    private fun resolveAction(dep: ScannedDependency.GitHubAction): ResolveOutcome {
         if (dep.refType == ActionRefType.SHA && dep.commentVersion == null) {
-            return Resolution.Skipped(
-                SkippedDependency(
-                    dep,
-                    "SHA-pinned without a version comment; cannot tell what is currently used"
-                )
-            )
+            val reason = "SHA-pinned without a version comment; cannot tell what is currently used"
+            return ResolveOutcome(Resolution.Skipped(SkippedDependency(dep, reason)))
         }
-        val current = dep.currentVersion
 
-        val releases = github.releases(dep.owner, dep.repo).filter { !it.prerelease }
-        val tagNames = releases.map { it.tagName }.ifEmpty { github.tags(dep.owner, dep.repo) }
+        val releases = github.releases(dep.owner, dep.repo)
+        val stable = releases.filter { !it.prerelease }
+        val tagNames = stable.map { it.tagName }.ifEmpty { github.tags(dep.owner, dep.repo) }
         if (tagNames.isEmpty()) {
-            return Resolution.Error("${dep.slug}: could not list releases/tags (rate limit or unknown repo)")
+            val message = "${dep.slug}: could not list releases/tags (rate limit or unknown repo)"
+            return ResolveOutcome(Resolution.Error(message))
         }
+        return ResolveOutcome(resolveActionVersion(dep, tagNames), pinningNote(dep, releases))
+    }
 
+    private fun resolveActionVersion(dep: ScannedDependency.GitHubAction, tagNames: List<String>): Resolution {
+        val current = dep.currentVersion
         val best = pickBest(dep, current, tagNames) ?: return Resolution.UpToDate
         if (dep.refType == ActionRefType.MOVING_MAJOR &&
             (Versions.majorOf(best) == null || Versions.majorOf(best) == Versions.majorOf(current))
@@ -74,6 +81,57 @@ class UpdateResolver(
                 githubRepo = "${dep.owner}/${dep.repo}",
             )
         )
+    }
+
+    /**
+     * An immutable release freezes its tag, which makes referencing it by tag as tamper-proof as
+     * a commit SHA. So warn about tag refs that can still be moved, and point out SHA pins that
+     * the immutability of their release already makes unnecessary.
+     */
+    private fun pinningNote(dep: ScannedDependency.GitHubAction, releases: List<GitHubRelease>): DependencyNote? {
+        val pinned = dep.refType == ActionRefType.SHA
+        val tag = (if (pinned) dep.commentVersion else dep.ref) ?: return null
+        val immutable = isImmutableRelease(dep, tag, releases)
+        val mutableRefReason = if (dep.refType == ActionRefType.MOVING_MAJOR) {
+            "follows a major tag that the publisher moves onto every new ${dep.ref}.x release"
+        } else {
+            "uses a tag that the publisher can still move or delete (the <b>$tag</b> release is not immutable)"
+        }
+        return when {
+            pinned && immutable -> DependencyNote(
+                dep,
+                NoteLevel.INFO,
+                "$tag is an immutable release, the SHA pin is optional",
+                "<p><code>${dep.slug}</code> is pinned to a commit SHA, but the <b>$tag</b> release is immutable: " +
+                    "its tag can no longer be moved or deleted, so <code>${dep.slug}@$tag</code> resolves to the " +
+                    "same code either way. Keeping the SHA does no harm, it just is not needed for this version.</p>",
+            )
+
+            !pinned && !immutable -> DependencyNote(
+                dep,
+                NoteLevel.WARNING,
+                "@${dep.ref} is not pinned and can move",
+                "<p><code>${dep.slug}@${dep.ref}</code> $mutableRefReason, so the code running in the workflow " +
+                    "can change without the ref changing. Pin it to the full commit SHA with a trailing " +
+                    "<code># $tag</code> comment to freeze the exact code that runs.</p>",
+            )
+
+            else -> null
+        }
+    }
+
+    /** Whether the release published for [tag] is immutable; false when the tag has no release. */
+    private fun isImmutableRelease(
+        dep: ScannedDependency.GitHubAction,
+        tag: String,
+        releases: List<GitHubRelease>,
+    ): Boolean {
+        releases.firstOrNull { Versions.normalize(it.tagName) == Versions.normalize(tag) }
+            ?.let { return it.immutable }
+        // Without any release, the ref can only point at a plain tag; otherwise the used version
+        // may just be older than the page of releases fetched above.
+        if (releases.isEmpty()) return false
+        return github.releaseByTag(dep.owner, dep.repo, tag)?.immutable ?: false
     }
 
     private fun resolveMaven(dep: ScannedDependency.MavenDependency): Resolution {

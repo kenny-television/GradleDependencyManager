@@ -30,6 +30,8 @@ import eu.kennytv.dependencymanager.apply.UpdateApplier
 import eu.kennytv.dependencymanager.ignore.IgnoreRule
 import eu.kennytv.dependencymanager.ignore.IgnoreRules
 import eu.kennytv.dependencymanager.model.CheckResult
+import eu.kennytv.dependencymanager.model.DependencyNote
+import eu.kennytv.dependencymanager.model.NoteLevel
 import eu.kennytv.dependencymanager.model.ScannedDependency
 import eu.kennytv.dependencymanager.model.UpdateCandidate
 import eu.kennytv.dependencymanager.model.UpdateType
@@ -54,6 +56,7 @@ class DependencyUpdatesPanel(private val project: Project) : SimpleToolWindowPan
     private var commitAfterApply = true
     private var verifyBeforeCommit = true
     private var currentCandidates: List<UpdateCandidate> = emptyList()
+    private var currentNotes: List<DependencyNote> = emptyList()
     private var checking = false
 
     init {
@@ -82,6 +85,14 @@ class DependencyUpdatesPanel(private val project: Project) : SimpleToolWindowPan
                             attributes,
                         )
                     }
+
+                    is DependencyNote -> {
+                        textRenderer.icon =
+                            if (userObject.level == NoteLevel.WARNING) AllIcons.General.Warning
+                            else AllIcons.General.Information
+                        textRenderer.append(userObject.dependency.displayName)
+                        textRenderer.append("  ${userObject.summary}", SimpleTextAttributes.GRAYED_ATTRIBUTES)
+                    }
                 }
             }
         }, rootNode, CheckboxTreeBase.CheckPolicy(true, true, true, true))
@@ -89,7 +100,10 @@ class DependencyUpdatesPanel(private val project: Project) : SimpleToolWindowPan
         tree.isRootVisible = false
         tree.emptyText.text = "Press the refresh button to check for dependency updates"
         tree.selectionModel.addTreeSelectionListener {
-            selectedCandidate()?.let { showChangelog(it) }
+            when (val selected = (tree.lastSelectedPathComponent as? CheckedTreeNode)?.userObject) {
+                is UpdateCandidate -> showChangelog(selected)
+                is DependencyNote -> showNote(selected)
+            }
         }
         PopupHandler.installPopupMenu(tree, buildPopupActions(), "DependencyManagerTreePopup")
 
@@ -218,7 +232,7 @@ class DependencyUpdatesPanel(private val project: Project) : SimpleToolWindowPan
 
     private fun setAllChecked(checked: Boolean) {
         fun walk(node: CheckedTreeNode) {
-            node.isChecked = checked
+            if (node.isEnabled) node.isChecked = checked
             for (child in node.children()) {
                 (child as? CheckedTreeNode)?.let { walk(it) }
             }
@@ -263,11 +277,18 @@ class DependencyUpdatesPanel(private val project: Project) : SimpleToolWindowPan
 
     private fun renderResult(result: CheckResult) {
         currentCandidates = result.updates
+        currentNotes = result.notes
         rootNode.removeAllChildren()
         for ((label, candidates) in result.updates.groupBy { it.dependency.groupLabel }) {
             val groupNode = CheckedTreeNode("$label (${candidates.size})")
             candidates.forEach { groupNode.add(CheckedTreeNode(it)) }
             rootNode.add(groupNode)
+        }
+        if (result.notes.isNotEmpty()) {
+            // Advice, not something to apply, so these entries can't be checked
+            val notesNode = CheckedTreeNode("Action pinning (${result.notes.size})").apply { isEnabled = false }
+            result.notes.forEach { notesNode.add(CheckedTreeNode(it).apply { isEnabled = false }) }
+            rootNode.add(notesNode)
         }
         treeModel.reload()
         TreeUtil.expandAll(tree)
@@ -296,6 +317,11 @@ class DependencyUpdatesPanel(private val project: Project) : SimpleToolWindowPan
         }
     }
 
+    private fun showNote(note: DependencyNote) {
+        changelogHeader.text = "<html><b>${note.dependency.displayName}</b> &nbsp; ${note.summary}</html>"
+        changelogView.showHtml(note.detail)
+    }
+
     private fun showChangelog(candidate: UpdateCandidate) {
         changelogHeader.text =
             "<html><b>${candidate.dependency.displayName}</b> &nbsp; ${candidate.dependency.currentVersion} → ${candidate.newVersion}</html>"
@@ -320,8 +346,12 @@ class DependencyUpdatesPanel(private val project: Project) : SimpleToolWindowPan
         currentCandidates = currentCandidates.filterNot {
             rule.matches(it.dependency) && rule.ignoresCandidate(Versions.normalize(it.newVersion), it.updateType)
         }
+        // A dependency ignored outright has nothing left to advise on either
+        currentNotes = currentNotes.filterNot {
+            rule.matches(it.dependency) && rule.versions.isEmpty() && rule.type == null
+        }
         val result = service.lastResult
-        if (result != null) renderResult(result.copy(updates = currentCandidates))
+        if (result != null) renderResult(result.copy(updates = currentCandidates, notes = currentNotes))
         if (added) {
             notify(
                 "Ignore rule added",

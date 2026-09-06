@@ -10,6 +10,8 @@ import eu.kennytv.dependencymanager.github.GitHubApi
 import eu.kennytv.dependencymanager.http.Http
 import eu.kennytv.dependencymanager.ignore.IgnoreRules
 import eu.kennytv.dependencymanager.model.CheckResult
+import eu.kennytv.dependencymanager.model.DependencyNote
+import eu.kennytv.dependencymanager.model.NoteLevel
 import eu.kennytv.dependencymanager.model.SkippedDependency
 import eu.kennytv.dependencymanager.model.UpdateCandidate
 import eu.kennytv.dependencymanager.resolve.Resolution
@@ -76,14 +78,16 @@ class DependencyUpdateService(private val project: Project) {
         val updates = mutableListOf<UpdateCandidate>()
         val skipped = mutableListOf<SkippedDependency>()
         val errors = mutableListOf<String>()
+        val notes = mutableListOf<DependencyNote>()
         var upToDate = 0
-        for ((dependency, resolution) in resolutions) {
-            when (resolution) {
+        for ((dependency, outcome) in resolutions) {
+            when (val resolution = outcome.resolution) {
                 is Resolution.Update -> updates += resolution.candidate
                 is Resolution.UpToDate -> upToDate++
                 is Resolution.Skipped -> skipped += resolution.skipped
                 is Resolution.Error -> errors += resolution.message
             }
+            outcome.note?.let { notes += it }
             indicator.text2 = dependency.displayName
         }
 
@@ -93,6 +97,9 @@ class DependencyUpdateService(private val project: Project) {
             skipped = skipped,
             errors = errors,
             timestamp = System.currentTimeMillis(),
+            notes = notes.sortedWith(
+                compareBy({ it.level != NoteLevel.WARNING }, { it.dependency.displayName })
+            ),
         )
         lastResult = result
         lastCheckMillis = result.timestamp
