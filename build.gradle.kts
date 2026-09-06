@@ -28,13 +28,13 @@ dependencies {
     }
 
     // Changelog markdown -> HTML; the platform's own markdown module is private as of 2026.2
-    implementation("org.commonmark:commonmark:0.29.0")
-    implementation("org.commonmark:commonmark-ext-gfm-tables:0.29.0")
-    implementation("org.commonmark:commonmark-ext-gfm-strikethrough:0.29.0")
-    implementation("org.commonmark:commonmark-ext-autolink:0.29.0")
+    implementation("org.commonmark:commonmark:0.30.0")
+    implementation("org.commonmark:commonmark-ext-gfm-tables:0.30.0")
+    implementation("org.commonmark:commonmark-ext-gfm-strikethrough:0.30.0")
+    implementation("org.commonmark:commonmark-ext-autolink:0.30.0")
 
-    testImplementation("org.junit.jupiter:junit-jupiter:6.1.2")
-    testRuntimeOnly("org.junit.platform:junit-platform-launcher:6.1.2")
+    testImplementation("org.junit.jupiter:junit-jupiter:6.1.3")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher:6.1.3")
     testImplementation("junit:junit:4.13.2")
 }
 
